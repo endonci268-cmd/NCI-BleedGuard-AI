@@ -1,7 +1,8 @@
 streamlit
 pandas
 numpy
-st-gsheets-connection
+streamlit-gsheets
 pytz
 joblib
 scikit-learn
+plotly
