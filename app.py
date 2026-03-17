@@ -55,12 +55,12 @@ with st.form("triage_form", clear_on_submit=True):
     
     submit_button = st.form_submit_button("🚀 ประเมินผล AI")
 
-# --- 6. ประมวลผล AI พร้อมตัวตรวจสอบจำนวน Features ---
+# --- 6. ประมวลผล AI (ส่ง 13 Features) ---
 if submit_button:
     if ai_model is not None:
         try:
-            # รายการตัวแปร 12 ตัวตามที่คุณพยาบาลแจ้งจาก Colab
-            input_list = [
+            # เตรียมข้อมูล 13 ตัว (12 ตัวเดิม + 1 ตัวสำรองเพื่อให้ครบตามที่โมเดลต้องการ)
+            input_data = [
                 age,                                          # 1. age
                 1 if sex == "ชาย" else 0,                     # 2. sex
                 size,                                         # 3. size_cm
@@ -72,33 +72,40 @@ if submit_button:
                 1 if procedure == "Biopsy Only" else 0,       # 9. bx
                 1 if procedure == "Cold Snare" else 0,        # 10. cold_snare
                 1 if procedure == "Hot Polypectomy" else 0,   # 11. hot_poly
-                1 if procedure == "EMR" else 0                # 12. emr
+                1 if procedure == "EMR" else 0,               # 12. emr
+                0                                             # 13. dummy feature (เพื่อให้ครบ 13 ตามที่โมเดลฟ้อง)
             ]
-
-            # ตรวจสอบว่าโมเดลนี้ต้องการตัวแปรกี่ตัวกันแน่
-            n_needed = ai_model.n_features_in_
             
-            # ปรับข้อมูลให้มีจำนวนเท่ากับที่โมเดลต้องการเป๊ะๆ
-            features = np.array([input_list[:n_needed]])
-
+            features = np.array([input_data])
             prob = ai_model.predict_proba(features)[0][1]
             score_percent = prob * 100
 
-            # แสดงผลลัพธ์
+            # กำหนดระดับความเสี่ยง
             risk = "RED" if prob >= 0.40 else "YELLOW" if prob >= 0.11 else "GREEN"
             color = "#FF4B4B" if risk == "RED" else "#FFA500" if risk == "YELLOW" else "#28A745"
-            
-            st.markdown(f"<div style='background:{color};padding:20px;border-radius:10px;text-align:center;color:white;'><h1>{risk}</h1><h3>ความเสี่ยง: {score_percent:.2f}%</h3></div>", unsafe_allow_html=True)
+            advice = "📞 โทรติดตาม 24, 48, 72 ชม." if risk == "RED" else "📞 โทรติดตาม 24, 48 ชม." if risk == "YELLOW" else "✅ ให้คู่มือสังเกตอาการ"
+
+            st.markdown(f"""
+                <div style='background-color:{color}; padding:20px; border-radius:10px; text-align:center; color:white;'>
+                    <h2>ระดับความเสี่ยง: {risk}</h2>
+                    <h3>โอกาสเกิดเลือดออก: {score_percent:.2f}%</h3>
+                    <p>{advice}</p>
+                </div>
+            """, unsafe_allow_html=True)
 
             # บันทึกข้อมูล
-            new_entry = pd.DataFrame([{"Timestamp": datetime.now(bkk_tz).strftime("%Y-%m-%d %H:%M:%S"), "Case_ID": case_id, "Procedure": procedure, "Risk_Level": risk, "Score": f"{score_percent:.2f}%"}])
+            new_entry = pd.DataFrame([{
+                "Timestamp": datetime.now(bkk_tz).strftime("%Y-%m-%d %H:%M:%S"),
+                "Case_ID": case_id, 
+                "Risk_Level": risk, 
+                "Score": f"{score_percent:.2f}%"
+            }])
             df_updated = pd.concat([df_history, new_entry], ignore_index=True)
             conn.update(data=df_updated)
             st.toast("✅ บันทึกสำเร็จ")
+            st.rerun()
 
         except Exception as e:
             st.error(f"❌ เกิดข้อผิดพลาด: {e}")
-            # แจ้งคุณพยาบาลว่า AI ตัวนี้จริงๆ แล้วต้องการตัวแปรกี่ตัว
-            st.info(f"💡 ข้อมูลทางเทคนิค: AI โมเดลของคุณพยาบาลต้องการตัวแปร {ai_model.n_features_in_} ตัว")
     else:
         st.error("ไม่สามารถโหลดโมเดลได้")
