@@ -5,4 +5,3 @@ streamlit-gsheets
 pytz
 joblib
 scikit-learn
-plotly
