@@ -48,7 +48,7 @@ next_case_id = get_next_id(df_history)
 
 # --- 5. ส่วนหัวของแอป ---
 st.markdown("<h2 style='text-align: center;'>🛡️ NCI BleedGuard-AI: Smart Dashboard</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: gray;'>ระบบวิเคราะห์ความเสี่ยงเลือดออกด้วย Artificial Intelligence<br>ศูนย์ส่องกล้องทางเดินอาหาร สถาบันมะเร็งแห่งชาติ</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: gray;'>ระบบวิเคราะห์ความเสี่ยงเลือดออกด้วย Artificial Intelligence (12-Features Model)<br>ศูนย์ส่องกล้องทางเดินอาหาร สถาบันมะเร็งแห่งชาติ</p>", unsafe_allow_html=True)
 st.divider()
 
 # --- 6. ฟอร์มรับข้อมูล (Input Section) ---
@@ -82,20 +82,21 @@ if submit_button:
     elif not df_history.empty and case_id in df_history["Case_ID"].values:
         st.error(f"❌ รหัส {case_id} ซ้ำ! กรุณาใช้รหัสใหม่")
     else:
-        # เตรียมข้อมูลให้ตรงกับลำดับในโมเดล
-        # ลำดับ: Age, Sex, Size, Medication, Location, Surgery, Radiation, Chemo, Cold, Hot, EMR
+        # เตรียมข้อมูลให้ตรงกับลำดับในโมเดล (12 ตัวแปรเป๊ะๆ)
+        # ลำดับ: Age, Sex, Size, Medication, Location, Surgery, Radiation, Chemo, Cold, Hot, EMR, Clip
         features = np.array([[
-            age,
-            1 if sex == "ชาย" else 0,
+            age, 
+            1 if sex == "ชาย" else 0, 
             size,
-            1 if medication == "ใช่" else 0,
+            1 if medication == "ใช่" else 0, 
             1 if location == "ลำไส้ใหญ่ฝั่งขวา" else 0,
-            1 if surgery == "ใช่" else 0,
-            1 if radiation == "ใช่" else 0,
+            1 if surgery == "ใช่" else 0, 
+            1 if radiation == "ใช่" else 0, 
             1 if chemo == "ใช่" else 0,
-            1 if procedure == "Cold Snare" else 0,
-            1 if procedure == "Hot Polypectomy" else 0,
-            1 if procedure == "EMR" else 0
+            1 if procedure == "Cold Snare" else 0, 
+            1 if procedure == "Hot Polypectomy" else 0, 
+            1 if procedure == "EMR" else 0,
+            1 if clip == "ใช่" else 1 if clip == "y" else 0 # รองรับทั้งการเลือก 'ใช่' และ 'y'
         ]])
 
         # ทำนายผลความน่าจะเป็น
@@ -110,16 +111,12 @@ if submit_button:
         else:
             risk, advice, color = "GREEN", "✅ ให้คู่มือสังเกตอาการตามปกติ", "#28A745"
 
-        # แสดงผลลัพธ์ Impact
+        # แสดงผลลัพธ์
         st.markdown(f"""
             <div style='background-color:{color}; padding:25px; border-radius:15px; text-align:center; color:white;'>
                 <h1 style='margin:0;'>ระดับความเสี่ยง: {risk}</h1>
                 <h3 style='margin:10px;'>โอกาสเกิดเลือดออก: {score_percent:.2f}%</h3>
                 <p style='font-size:18px;'>{advice}</p>
-            </div>
-            <div style='text-align:center; margin-top:15px;'>
-                <p><b>📲 กรุณาแจ้งให้ผู้ป่วย Add Line ศูนย์ส่องกล้อง</b></p>
-                <a href='https://line.me' target='_blank' style='background-color:#06C755; color:white; padding:10px 20px; text-decoration:none; border-radius:8px; font-weight:bold;'>➕ เพิ่มเพื่อน LINE</a>
             </div>
         """, unsafe_allow_html=True)
 
@@ -138,7 +135,7 @@ if submit_button:
         except:
             st.error("บันทึกข้อมูลลง Sheets ไม่สำเร็จ")
 
-# --- 8. Dashboard สรุปผล (คงเดิม) ---
+# --- 8. Dashboard สรุปผล ---
 st.divider()
 st.header("📊 Dashboard วิเคราะห์ข้อมูล")
 
@@ -153,5 +150,5 @@ if not df_history.empty:
     t3.metric("🟡 ปานกลาง", len(df_today[df_today['Risk_Level'] == 'YELLOW']))
     t4.metric("🟢 เสี่ยงต่ำ", len(df_today[df_today['Risk_Level'] == 'GREEN']))
     
-    st.subheader("📋 ประวัติการบันทึก 10 รายล่าสุด")
+    st.subheader("📋 ประวัติการบันทึกล่าสุด")
     st.dataframe(df_history.tail(10).sort_values(by='Timestamp', ascending=False), use_container_width=True)
