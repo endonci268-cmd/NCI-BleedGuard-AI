@@ -37,6 +37,21 @@ try:
 except:
     df_history = pd.DataFrame()
 
+# --- ฟังก์ชันพิเศษสำหรับระบายสีตาราง ---
+def highlight_risk(val):
+    if val == 'RED':
+        color = '#FF4B4B'
+        text = 'white'
+    elif val == 'YELLOW':
+        color = '#FFCC00'
+        text = 'black'
+    elif val == 'GREEN':
+        color = '#28A745'
+        text = 'white'
+    else:
+        return ''
+    return f'background-color: {color}; color: {text}; font-weight: bold;'
+
 # --- 4. ส่วนหัวแอป ---
 st.markdown("<h2 style='text-align: center; color: #004d99;'>🛡️ ระบบคัดกรองความเสี่ยงหลังส่องกล้องลำไส้ใหญ่และตัดติ่งเนื้อ</h2>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center; color: #004d99;'>(NCI Bleed Guard AI)</h3>", unsafe_allow_html=True)
@@ -45,8 +60,6 @@ st.divider()
 # --- 5. ส่วนบันทึกข้อมูลแบบแยก Tab ---
 with st.form("triage_form", clear_on_submit=False):
     st.markdown("#### 📝 บันทึกข้อมูลแยกตามหมวดหมู่")
-    
-    # สร้าง Tabs เพื่อแยกสัดส่วนข้อมูล
     tab1, tab2, tab3 = st.tabs(["👤 ข้อมูลทั่วไป & ประวัติ", "🔍 รายละเอียดหัตถการ", "💊 ปัจจัยเสี่ยง & Clip"])
     
     with tab1:
@@ -57,19 +70,16 @@ with st.form("triage_form", clear_on_submit=False):
         surgery = c2.selectbox("Surgery (ประวัติผ่าตัดช่องท้อง)", ["ไม่ใช่", "ใช่"])
         radiation = c1.selectbox("Radiation (ประวัติฉายแสง)", ["ไม่ใช่", "ใช่"])
         chemo = c2.selectbox("Chemo (ประวัติเคมีบำบัด)", ["ไม่ใช่", "ใช่"])
-
     with tab2:
         c3, c4 = st.columns(2)
         procedure = c3.selectbox("Procedure (วิธีทำหัตถการ)", ["Biopsy Only", "Cold Snare", "Hot Polypectomy", "EMR"])
         size = c4.number_input("Size (ขนาดติ่งเนื้อ cm)", min_value=0.0, step=0.1, value=0.0)
         location = c3.selectbox("loc_right (ตำแหน่งที่พบ)", ["ลำไส้ใหญ่ฝั่งซ้าย", "ลำไส้ใหญ่ฝั่งขวา"])
-
     with tab3:
         c5, c6 = st.columns(2)
         medication = c5.selectbox("Medication (ยาละลายลิ่มเลือด/ต้านเกล็ดเลือด)", ["ไม่ใช่", "ใช่"])
         hemoclip = c6.selectbox("Hemoclip (มีการติด Clip หรือไม่)", ["ไม่ใส่", "ใส่"])
-        st.info("💡 ข้อมูลในส่วนนี้จะถูกนำไปวิเคราะห์ความเสี่ยงสะสมร่วมกับประวัติผู้ป่วย")
-
+    
     st.markdown("<br>", unsafe_allow_html=True)
     submit_button = st.form_submit_button("🚀 ประเมินความเสี่ยงและบันทึกข้อมูลลงระบบ")
 
@@ -86,43 +96,36 @@ if submit_button:
             prob = ai_model.predict_proba(np.array([input_data]))[0][1]
             score_percent = prob * 100
 
-            if prob >= 0.40: 
-                risk, color, text_color, action = "RED (เสี่ยงสูงมาก)", "#FF4B4B", "white", "🚨 โทรติดตามที่ 24, 48, 72 ชม."
-            elif prob >= 0.11: 
-                risk, color, text_color, action = "YELLOW (เสี่ยงปานกลาง)", "#FFCC00", "black", "⚠️ โทรติดตามที่ 24, 48 ชม."
-            else: 
-                risk, color, text_color, action = "GREEN (เสี่ยงต่ำ)", "#28A745", "white", "✅ ให้คู่มือสังเกตอาการตามมาตรฐาน"
+            if prob >= 0.40: risk, color, text_color, action = "RED", "#FF4B4B", "white", "🚨 โทรติดตามที่ 24, 48, 72 ชม."
+            elif prob >= 0.11: risk, color, text_color, action = "YELLOW", "#FFCC00", "black", "⚠️ โทรติดตามที่ 24, 48 ชม."
+            else: risk, color, text_color, action = "GREEN", "#28A745", "white", "✅ ให้คู่มือสังเกตอาการตามมาตรฐาน"
 
             res_col1, res_col2 = st.columns([1.2, 1])
             with res_col1:
                 fig_gauge = go.Figure(go.Indicator(
                     mode = "gauge+number", value = score_percent,
                     title = {'text': f"Risk Score: {case_id}"},
-                    gauge = {
-                        'axis': {'range': [0, 100]},
-                        'bar': {'color': "black"},
-                        'steps': [{'range': [0, 11], 'color': "#28A745"},
-                                   {'range': [11, 40], 'color': "#FFCC00"},
-                                   {'range': [40, 100], 'color': "#FF4B4B"}]
-                    }))
+                    gauge = {'axis': {'range': [0, 100]}, 'bar': {'color': "black"},
+                             'steps': [{'range': [0, 11], 'color': "#28A745"},
+                                       {'range': [11, 40], 'color': "#FFCC00"},
+                                       {'range': [40, 100], 'color': "#FF4B4B"}]}))
                 fig_gauge.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
                 st.plotly_chart(fig_gauge, use_container_width=True)
 
             with res_col2:
                 st.markdown(f"""
                     <div style='background-color:{color}; padding:25px; border-radius:15px; text-align:center; color:{text_color}; margin-top:40px; border: 2px solid #333;'>
-                        <h2 style='margin:0;'>{risk}</h2>
+                        <h2 style='margin:0;'>{risk} (เสี่ยง{'สูงมาก' if risk=='RED' else 'ปานกลาง' if risk=='YELLOW' else 'ต่ำ'})</h2>
                         <h3 style='margin:10px;'>โอกาสเลือดออก: {score_percent:.2f}%</h3>
                         <p style='font-size: 1.4em; font-weight: bold;'>{action}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    </div>""", unsafe_allow_html=True)
 
             new_entry = pd.DataFrame([{
                 "Timestamp": datetime.now(bkk_tz).strftime("%Y-%m-%d %H:%M:%S"),
                 "Case_ID": case_id, "Age": age, "Sex": sex, "Size": size,
                 "loc_right": 1 if location == "ลำไส้ใหญ่ฝั่งขวา" else 0, 
                 "Medication": medication, "Chemo": chemo,
-                "Clip": hemoclip, "Risk_Level": risk.split()[0], "Score": f"{score_percent:.2f}%", "Advice": action
+                "Clip": hemoclip, "Risk_Level": risk, "Score": f"{score_percent:.2f}%", "Advice": action
             }])
             conn.update(worksheet="Sheet1", data=pd.concat([df_history, new_entry], ignore_index=True))
             st.toast(f"บันทึกข้อมูลเรียบร้อย")
@@ -131,7 +134,7 @@ if submit_button:
     else:
         st.warning("กรุณาระบุรหัสเคสต่อท้าย ENDO-NCI-")
 
-# --- 7. DASHBOARD (ส่วนสรุปผล) ---
+# --- 7. DASHBOARD (ส่วนสรุปผลพร้อมตารางสี) ---
 st.divider()
 if not df_history.empty:
     df_history['Date_Only'] = pd.to_datetime(df_history['Timestamp']).dt.date
@@ -146,11 +149,18 @@ if not df_history.empty:
     c3.markdown(f"<div class='metric-container' style='border-top: 5px solid #FFCC00;'><b>🟡 YELLOW</b><br><span style='font-size:24px;'>{len(df_filtered[df_filtered['Risk_Level'] == 'YELLOW'])}</span></div>", unsafe_allow_html=True)
     c4.markdown(f"<div class='metric-container' style='border-top: 5px solid #FF4B4B;'><b>🔴 RED</b><br><span style='font-size:24px;'>{len(df_filtered[df_filtered['Risk_Level'] == 'RED'])}</span></div>", unsafe_allow_html=True)
 
-    g1, g2 = st.columns(2)
+    g1, g2 = st.columns([1, 1.2]) # ปรับขนาดคอลัมน์ตารางให้กว้างขึ้นเล็กน้อย
     with g1:
         daily_trend = df_history.groupby(['Date_Only', 'Risk_Level']).size().reset_index(name='Count')
         fig_trend = px.bar(daily_trend, x='Date_Only', y='Count', color='Risk_Level',
                            color_discrete_map={'RED': '#FF4B4B', 'YELLOW': '#FFCC00', 'GREEN': '#28A745'}, barmode='stack', height=350)
         st.plotly_chart(fig_trend, use_container_width=True)
     with g2:
-        st.dataframe(df_filtered.reset_index()[['Timestamp', 'Case_ID', 'Risk_Level', 'Score']], use_container_width=True, hide_index=True)
+        st.write("📋 รายละเอียดหัตถการ (แถบสีตามระดับความเสี่ยง)")
+        # นำ dataframe มาจัดรูปแบบแถบสี
+        styled_df = df_filtered.reset_index()[['Timestamp', 'Case_ID', 'Risk_Level', 'Score']]
+        st.dataframe(
+            styled_df.style.applymap(highlight_risk, subset=['Risk_Level']), 
+            use_container_width=True, 
+            hide_index=True
+        )
