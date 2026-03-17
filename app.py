@@ -133,4 +133,22 @@ if not df_history.empty:
     st.markdown(f"#### 🏥 สรุปเคสประจำวันที่ {search_date}")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("รวมทั้งหมด", f"{len(df_filtered)} เคส")
-    c2.markdown(f"<div class='metric-container' style='border-top: 5px solid #28A745;'><b>🟢 เสี่ยงต่ำ (GREEN)</b><br><span style='font-size:24px;'>{len(df_filtered[df_filtered['Risk_Level'] == '
+    c2.markdown(f"<div class='metric-container' style='border-top: 5px solid #28A745;'><b>🟢 เสี่ยงต่ำ (GREEN)</b><br><span style='font-size:24px;'>{len(df_filtered[df_filtered['Risk_Level'] == 'GREEN'])}</span></div>", unsafe_allow_html=True)
+    c3.markdown(f"<div class='metric-container' style='border-top: 5px solid #FFA500;'><b>🟡 ปานกลาง (YELLOW)</b><br><span style='font-size:24px;'>{len(df_filtered[df_filtered['Risk_Level'] == 'YELLOW'])}</span></div>", unsafe_allow_html=True)
+    c4.markdown(f"<div class='metric-container' style='border-top: 5px solid #FF4B4B;'><b>🔴 เสี่ยงสูง (RED)</b><br><span style='font-size:24px;'>{len(df_filtered[df_filtered['Risk_Level'] == 'RED'])}</span></div>", unsafe_allow_html=True)
+
+    # กราฟสถิติ
+    st.markdown("---")
+    g1, g2 = st.columns(2)
+    with g1:
+        st.write("📈 สถิติความเสี่ยงย้อนหลัง")
+        daily_trend = df_history.groupby(['Date_Only', 'Risk_Level']).size().reset_index(name='Count')
+        fig_trend = px.bar(daily_trend, x='Date_Only', y='Count', color='Risk_Level',
+                           color_discrete_map={'RED': '#FF4B4B', 'YELLOW': '#FFA500', 'GREEN': '#28A745'},
+                           barmode='stack', height=350)
+        st.plotly_chart(fig_trend, use_container_width=True)
+    with g2:
+        st.write("📋 รายการบันทึกของวัน")
+        st.dataframe(df_filtered.reset_index()[['Timestamp', 'Case_ID', 'Risk_Level', 'Score']], use_container_width=True, hide_index=True)
+else:
+    st.info("ยังไม่มีข้อมูลบันทึกในระบบ")
