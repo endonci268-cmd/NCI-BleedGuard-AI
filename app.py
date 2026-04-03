@@ -159,7 +159,7 @@ if not df_history.empty:
         st.write("📋 รายละเอียดหัตถการ (แถบสีตามระดับความเสี่ยง)")
         # นำ dataframe มาจัดรูปแบบแถบสี
         styled_df = df_filtered.reset_index()[['Timestamp', 'Case_ID', 'Risk_Level', 'Score']]
-   st.dataframe(
+        st.dataframe(
             styled_df.style.map(highlight_risk, subset=['Risk_Level']), 
             use_container_width=True, 
             hide_index=True
