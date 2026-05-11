@@ -25,8 +25,10 @@ st.markdown("""
 # --- 2. โหลดโมเดล AI (Train จาก 1,250 เคส) ---
 @st.cache_resource
 def load_bleed_model():
-    try: return joblib.load("bleedguard_model.pkl")
-    except: return None
+    try: 
+        return joblib.load("bleedguard_model.pkl")
+    except: 
+        return None
 
 ai_model = load_bleed_model()
 
@@ -83,4 +85,35 @@ with st.form("nci_triage_form", clear_on_submit=False):
 if submit_button:
     if ai_model and case_id != "ENDO-NCI-":
         try:
-            # 1. เตรียม
+            # 1. เตรียมข้อมูลให้โมเดล AI (1,250 เคส)
+            input_data = [age, 1 if sex == "ชาย" else 0, size, 1 if location == "ลำไส้ใหญ่ฝั่งขวา" else 0,
+                          1 if medication == "ใช่" else 0, 1 if surgery == "ใช่" else 0, 1 if radiation == "ใช่" else 0,
+                          1 if chemo == "ใช่" else 0, 1 if procedure == "Biopsy Only" else 0, 
+                          1 if procedure == "Cold Snare" else 0, 1 if procedure == "Hot Polypectomy" else 0,
+                          1 if procedure == "EMR" else 0, 0]
+            
+            prob = ai_model.predict_proba(np.array([input_data]))[0][1]
+            score_percent = prob * 100
+
+            # 2. Clinical Override (ระบบความปลอดภัยพยาบาลวิชาชีพ)
+            if procedure == "EMR" or (medication == "ใช่" and hemoclip == "ใส่") or radiation == "ใช่":
+                risk, color, text_color, action = "RED", "#FF4B4B", "white", "🚨 โทรติดตามที่ 24, 48, 72 ชม. (High Risk Clinical Override)"
+                if score_percent < 85: score_percent = 85.0
+            elif hemoclip == "ใส่" or size >= 2.0:
+                risk, color, text_color, action = "YELLOW", "#FFCC00", "black", "⚠️ โทรติดตามที่ 24, 48 ชม. (Monitoring Required)"
+                if score_percent < 35: score_percent = 35.0
+            elif prob >= 0.40: 
+                risk, color, text_color, action = "RED", "#FF4B4B", "white", "🚨 โทรติดตามที่ 24, 48, 72 ชม."
+            elif prob >= 0.11: 
+                risk, color, text_color, action = "YELLOW", "#FFCC00", "black", "⚠️ โทรติดตามที่ 24, 48 ชม."
+            else: 
+                risk, color, text_color, action = "GREEN", "#28A745", "white", "✅ ให้คู่มือสังเกตอาการตามมาตรฐาน"
+
+            # แสดงผลลัพธ์บนแอป
+            res_col1, res_col2 = st.columns([1.2, 1])
+            with res_col1:
+                fig_gauge = go.Figure(go.Indicator(
+                    mode = "gauge+number", value = score_percent,
+                    number = {'suffix': "%"},
+                    title = {'text': f"Risk Score: {case_id}"},
+                    gauge = {'axis': {'range': [0, 100
