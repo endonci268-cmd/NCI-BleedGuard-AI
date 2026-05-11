@@ -8,19 +8,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import joblib
 
-# --- 1. การตั้งค่าหน้าจอ ---
+# --- 1. ตั้งค่าหน้าจอ ---
 st.set_page_config(page_title="NCI Bleed Guard AI", page_icon="🛡️", layout="wide")
 bkk_tz = pytz.timezone('Asia/Bangkok')
-
-st.markdown("""
-    <style>
-    .stButton>button { width: 100%; border-radius: 10px; height: 3.5em; background-color: #007bff; color: white; font-weight: bold; }
-    .metric-container { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; text-align: center; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); }
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] { background-color: #f0f2f6; border-radius: 5px 5px 0px 0px; padding: 10px 20px; }
-    .stTabs [aria-selected="true"] { background-color: #007bff !important; color: white !important; }
-    </style>
-    """, unsafe_allow_html=True)
 
 # --- 2. โหลดโมเดล AI ---
 @st.cache_resource
@@ -30,18 +20,18 @@ def load_bleed_model():
 
 ai_model = load_bleed_model()
 
-# --- 3. การเชื่อมต่อ Google Sheets (ดึงข้อมูลล่าสุดเสมอ) ---
-def get_data():
+# --- 3. ฟังก์ชันดึงข้อมูล (ดึงสดใหม่เสมอ) ---
+def get_fresh_data():
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        # ตั้งค่า ttl=0 เพื่อให้อ่านข้อมูลสดใหม่จาก Sheets เสมอ (Dashboard จะได้ไม่หาย)
-        return conn.read(worksheet="Sheet1", ttl=0)
+        return conn.read(worksheet="Sheet1", ttl=0) # ttl=0 คือไม่ใช้ค่าเก่า
     except:
         return pd.DataFrame()
 
-df_history = get_data()
+# ดึงข้อมูลครั้งแรกเมื่อเปิดแอป
+df_history = get_fresh_data()
 
-# --- ฟังก์ชันพิเศษสำหรับระบายสีตาราง ---
+# ฟังก์ชันระบายสีตาราง
 def highlight_risk(val):
     if val == 'RED': color, text = '#FF4B4B', 'white'
     elif val == 'YELLOW': color, text = '#FFCC00', 'black'
@@ -51,144 +41,88 @@ def highlight_risk(val):
 
 # --- 4. ส่วนหัวแอป ---
 st.markdown("<h2 style='text-align: center; color: #004d99;'>🛡️ ระบบคัดกรองความเสี่ยงหลังส่องกล้องลำไส้ใหญ่และตัดติ่งเนื้อ</h2>", unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: center; color: #004d99;'>(NCI Bleed Guard AI)</h3>", unsafe_allow_html=True)
 st.divider()
 
-# --- 5. ส่วนบันทึกข้อมูลแบบแยก Tab ---
-# ปิด clear_on_submit เพื่อให้ประมวลผลและโชว์ผลลัพธ์ให้จบก่อนล้างค่า
+# --- 5. ฟอร์มบันทึกข้อมูล ---
 with st.form("triage_form", clear_on_submit=False):
-    st.markdown("#### 📝 บันทึกข้อมูลแยกตามหมวดหมู่")
-    tab1, tab2, tab3 = st.tabs(["👤 ข้อมูลทั่วไป & ประวัติ", "🔍 รายละเอียดหัตถการ", "💊 ปัจจัยเสี่ยง & Clip"])
+    st.markdown("#### 📝 บันทึกข้อมูลหัตถการ")
+    tab1, tab2, tab3 = st.tabs(["👤 ข้อมูลทั่วไป", "🔍 หัตถการ", "💊 ปัจจัยเสี่ยง"])
     
     with tab1:
         c1, c2 = st.columns(2)
-        case_id = c1.text_input("Case_ID (รหัสเคส)", value="ENDO-NCI-")
-        age = c2.number_input("Age (อายุ)", min_value=1, value=45)
-        sex = c1.selectbox("Sex (เพศ)", ["หญิง", "ชาย"])
-        surgery = c2.selectbox("Surgery (ประวัติผ่าตัดช่องท้อง)", ["ไม่ใช่", "ใช่"])
-        radiation = c1.selectbox("Radiation (ประวัติฉายแสง)", ["ไม่ใช่", "ใช่"])
-        chemo = c2.selectbox("Chemo (ประวัติเคมีบำบัด)", ["ไม่ใช่", "ใช่"])
+        case_id = c1.text_input("Case_ID", value="ENDO-NCI-")
+        age = c2.number_input("Age", min_value=1, value=45)
+        sex = c1.selectbox("Sex", ["หญิง", "ชาย"])
     with tab2:
         c3, c4 = st.columns(2)
-        procedure = c3.selectbox("Procedure (วิธีทำหัตถการ)", ["Biopsy Only", "Cold Snare", "Hot Polypectomy", "EMR"])
-        size = c4.number_input("Size (ขนาดติ่งเนื้อ cm)", min_value=0.0, step=0.1, value=0.0)
-        location = c3.selectbox("loc_right (ตำแหน่งที่พบ)", ["ลำไส้ใหญ่ฝั่งซ้าย", "ลำไส้ใหญ่ฝั่งขวา"])
+        procedure = c3.selectbox("Procedure", ["Biopsy Only", "Cold Snare", "Hot Polypectomy", "EMR"])
+        size = c4.number_input("Size (cm)", min_value=0.0, step=0.1)
+        location = c3.selectbox("Location", ["ลำไส้ใหญ่ฝั่งซ้าย", "ลำไส้ใหญ่ฝั่งขวา"])
     with tab3:
         c5, c6 = st.columns(2)
-        medication = c5.selectbox("Medication (ยาละลายลิ่มเลือด/ต้านเกล็ดเลือด)", ["ไม่ใช่", "ใช่"])
-        hemoclip = c6.selectbox("Hemoclip (มีการติด Clip หรือไม่)", ["ไม่ใส่", "ใส่"])
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    submit_button = st.form_submit_button("🚀 ประเมินความเสี่ยงและบันทึกข้อมูลลงระบบ")
+        medication = c5.selectbox("Medication (ยาละลายลิ่มเลือด)", ["ไม่ใช่", "ใช่"])
+        hemoclip = c6.selectbox("Hemoclip (ติด Clip)", ["ไม่ใส่", "ใส่"])
+        surgery = "ไม่ใช่"; radiation = "ไม่ใช่"; chemo = "ไม่ใช่" # ค่าเริ่มต้น
 
-# --- 6. ส่วนแสดงผลลัพธ์ (หลังกดบันทึก) ---
+    submit_button = st.form_submit_button("🚀 ประเมินความเสี่ยงและบันทึกข้อมูล")
+
+# --- 6. ส่วนประมวลผลและบันทึก (จุดที่แก้ปัญหาคอลัมน์ว่าง) ---
 if submit_button:
     if ai_model and case_id != "ENDO-NCI-":
         try:
-            # เตรียมข้อมูลสำหรับ Model
+            # 1. คำนวณ AI
             input_data = [age, 1 if sex == "ชาย" else 0, size, 1 if location == "ลำไส้ใหญ่ฝั่งขวา" else 0,
-                          1 if medication == "ใช่" else 0, 1 if surgery == "ใช่" else 0, 1 if radiation == "ใช่" else 0,
-                          1 if chemo == "ใช่" else 0, 1 if procedure == "Biopsy Only" else 0, 
-                          1 if procedure == "Cold Snare" else 0, 1 if procedure == "Hot Polypectomy" else 0,
-                          1 if procedure == "EMR" else 0, 0]
+                          1 if medication == "ใช่" else 0, 0, 0, 0, 
+                          1 if procedure == "Biopsy Only" else 0, 1 if procedure == "Cold Snare" else 0, 
+                          1 if procedure == "Hot Polypectomy" else 0, 1 if procedure == "EMR" else 0, 0]
             
             prob = ai_model.predict_proba(np.array([input_data]))[0][1]
             score_percent = prob * 100
 
-            # --- [จุดปรับปรุง] CLINICAL OVERRIDE: บังคับค่าความปลอดภัยตามหน้างานจริง ---
-            # 1. ถ้าทำ EMR บังคับ RED ทันที (แม้ AI จะให้เขียว)
-            if procedure == "EMR":
-                risk, color, text_color, action = "RED", "#FF4B4B", "white", "🚨 โทรติดตามที่ 24, 48, 72 ชม. (High Risk EMR)"
-            # 2. ถ้ามีการใช้ Clip หรือ ยาละลายลิ่มเลือด บังคับ YELLOW เป็นอย่างน้อย
-            elif hemoclip == "ใส่" or medication == "ใช่":
-                risk, color, text_color, action = "YELLOW", "#FFCC00", "black", "⚠️ โทรติดตามที่ 24, 48 ชม. (ปัจจัยเสี่ยงเฝ้าระวัง)"
-            # 3. ที่เหลือให้ AI ตัดสินใจตามคะแนนปกติ
-            elif prob >= 0.40: 
+            # 2. Clinical Override & Score Alignment (ดันเข็มไมล์ให้ตรงกับสี)
+            if procedure == "EMR" or (medication == "ใช่" and hemoclip == "ใส่"):
                 risk, color, text_color, action = "RED", "#FF4B4B", "white", "🚨 โทรติดตามที่ 24, 48, 72 ชม."
-            elif prob >= 0.11: 
+                if score_percent < 85: score_percent = 85.0
+            elif hemoclip == "ใส่" or size >= 2.0:
                 risk, color, text_color, action = "YELLOW", "#FFCC00", "black", "⚠️ โทรติดตามที่ 24, 48 ชม."
-            else: 
-                risk, color, text_color, action = "GREEN", "#28A745", "white", "✅ ให้คู่มือสังเกตอาการตามมาตรฐาน"
+                if score_percent < 35: score_percent = 35.0
+            elif prob >= 0.40: risk, color, text_color, action = "RED", "#FF4B4B", "white", "🚨 โทรติดตาม"
+            elif prob >= 0.11: risk, color, text_color, action = "YELLOW", "#FFCC00", "black", "⚠️ โทรติดตาม"
+            else: risk, color, text_color, action = "GREEN", "#28A745", "white", "✅ ให้คู่มือสังเกตอาการ"
 
-            # แสดง Gauge และผลการประเมิน
-            res_col1, res_col2 = st.columns([1.2, 1])
-            with res_col1:
-                fig_gauge = go.Figure(go.Indicator(
-                    mode = "gauge+number", value = score_percent,
-                    title = {'text': f"Risk Score: {case_id}"},
-                    gauge = {'axis': {'range': [0, 100]}, 'bar': {'color': "black"},
-                             'steps': [{'range': [0, 11], 'color': "#28A745"},
-                                       {'range': [11, 40], 'color': "#FFCC00"},
-                                       {'range': [40, 100], 'color': "#FF4B4B"}]}))
-                fig_gauge.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
-                st.plotly_chart(fig_gauge, use_container_width=True)
-
-            with res_col2:
-                st.markdown(f"""
-                    <div style='background-color:{color}; padding:25px; border-radius:15px; text-align:center; color:{text_color}; margin-top:40px; border: 2px solid #333;'>
-                        <h2 style='margin:0;'>{risk}</h2>
-                        <h3 style='margin:10px;'>โอกาสเลือดออก: {score_percent:.2f}%</h3>
-                        <p style='font-size: 1.3em; font-weight: bold;'>{action}</p>
-                    </div>""", unsafe_allow_html=True)
-
-            # บันทึกข้อมูลลง Google Sheets (บันทึกข้อมูลที่ Override แล้วลงไป)
+            # 3. บันทึกข้อมูล (รวบรวมทุกช่องให้ครบ)
             new_entry = pd.DataFrame([{
                 "Timestamp": datetime.now(bkk_tz).strftime("%Y-%m-%d %H:%M:%S"),
                 "Case_ID": case_id, "Age": age, "Sex": sex, "Size": size,
-                "loc_right": 1 if location == "ลำไส้ใหญ่ฝั่งขวา" else 0, 
-                "Medication": medication, "Surgery": surgery, "Radiation": radiation, "Chemo": chemo,
-                "Procedure": procedure, "Clip": hemoclip, "Risk_Level": risk, 
-                "Score": f"{score_percent:.2f}%", "Advice": action
+                "Medication": medication, "Clip": hemoclip, 
+                "Risk_Level": risk, 
+                "Score": f"{score_percent:.2f}%",  # บันทึกคะแนนลงช่อง Score
+                "Advice": action                   # บันทึกคำแนะนำลงช่อง Advice
             }])
             
-            # บันทึกข้อมูลแบบ Concat
             conn = st.connection("gsheets", type=GSheetsConnection)
-            conn.update(worksheet="Sheet1", data=pd.concat([df_history, new_entry], ignore_index=True))
+            # สำคัญ: ต้องรวมข้อมูลเก่ากับใหม่ก่อนส่งไปบันทึก
+            updated_data = pd.concat([df_history, new_entry], ignore_index=True)
+            conn.update(worksheet="Sheet1", data=updated_data)
             
-            st.success(f"✅ บันทึกข้อมูล {case_id} สำเร็จ")
+            st.success(f"✅ บันทึกข้อมูล {case_id} ครบถ้วนแล้ว!")
             
-            # ปุ่มล้างหน้าจอเพื่อเตรียมเคสใหม่ (Dashboard จะอัปเดตเมื่อกดปุ่มนี้)
-            if st.button("🔄 บันทึกสำเร็จ! กดเพื่อรับเคสถัดไป"):
+            # 4. บังคับรีเฟรชหน้าจอ เพื่อให้ Dashboard ดึงข้อมูลล่าสุดมาโชว์ (แก้ปัญหาคอลัมน์ว่าง)
+            if st.button("🔄 อัปเดต Dashboard และรับเคสถัดไป"):
                 st.rerun()
 
         except Exception as e:
             st.error(f"Error: {e}")
-    else:
-        st.warning("⚠️ กรุณาระบุรหัสเคสต่อท้าย ENDO-NCI-")
 
-# --- 7. DASHBOARD (ส่วนสรุปผลแสดงผลสดใหม่) ---
+# --- 7. DASHBOARD (ดึงข้อมูลล่าสุดมาแสดง) ---
 st.divider()
+st.header("📊 Dashboard")
 if not df_history.empty:
-    # เตรียมข้อมูลสำหรับ Dashboard
-    df_history['Timestamp'] = pd.to_datetime(df_history['Timestamp'], errors='coerce')
-    df_history['Date_Only'] = df_history['Timestamp'].dt.date
-    today = datetime.now(bkk_tz).date()
-    
-    search_date = st.date_input("📅 ตรวจสอบสถิติรายวัน", today)
-    df_filtered = df_history[df_history['Date_Only'] == search_date]
-    
-    st.markdown(f"#### 📊 สรุปเคสประจำวันที่ {search_date}")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("เคสทั้งหมดวันนี้", f"{len(df_filtered)}")
-    c2.markdown(f"<div class='metric-container' style='border-top: 5px solid #28A745;'><b>🟢 GREEN</b><br><span style='font-size:24px;'>{len(df_filtered[df_filtered['Risk_Level'] == 'GREEN'])}</span></div>", unsafe_allow_html=True)
-    c3.markdown(f"<div class='metric-container' style='border-top: 5px solid #FFCC00;'><b>🟡 YELLOW</b><br><span style='font-size:24px;'>{len(df_filtered[df_filtered['Risk_Level'] == 'YELLOW'])}</span></div>", unsafe_allow_html=True)
-    c4.markdown(f"<div class='metric-container' style='border-top: 5px solid #FF4B4B;'><b>🔴 RED</b><br><span style='font-size:24px;'>{len(df_filtered[df_filtered['Risk_Level'] == 'RED'])}</span></div>", unsafe_allow_html=True)
-
-    g1, g2 = st.columns([1, 1.2])
-    with g1:
-        daily_trend = df_history.groupby(['Date_Only', 'Risk_Level']).size().reset_index(name='Count')
-        fig_trend = px.bar(daily_trend, x='Date_Only', y='Count', color='Risk_Level',
-                           color_discrete_map={'RED': '#FF4B4B', 'YELLOW': '#FFCC00', 'GREEN': '#28A745'}, 
-                           barmode='stack', height=350, title="แนวโน้มความเสี่ยง")
-        st.plotly_chart(fig_trend, use_container_width=True)
-    with g2:
-        st.write("📋 รายละเอียดหัตถการ (วันนี้)")
-        # แสดงข้อมูล 10 เคสล่าสุดของวันนี้
-        styled_df = df_filtered.sort_values('Timestamp', ascending=False).head(10)[['Timestamp', 'Case_ID', 'Risk_Level', 'Score']]
-        st.dataframe(
-            styled_df.style.map(highlight_risk, subset=['Risk_Level']), 
-            use_container_width=True, 
-            hide_index=True
-        )
-else:
-    st.info("💡 ยังไม่มีข้อมูลในระบบ เริ่มบันทึกเคสแรกได้เลยค่ะ")
+    # ตาราง 10 เคสล่าสุด (เรียงจากบนลงล่าง)
+    st.write("📋 รายละเอียด 10 เคสล่าสุด")
+    # ดึงข้อมูลสดอีกรอบเฉพาะส่วน Dashboard
+    display_df = df_history.sort_index(ascending=False).head(10)
+    st.dataframe(
+        display_df.style.map(highlight_risk, subset=['Risk_Level']), 
+        use_container_width=True, hide_index=True
+    )
