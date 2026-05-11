@@ -22,15 +22,17 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. โหลดโมเดล AI (1,250 เคส) ---
+# --- 2. โหลดโมเดล AI (ใช้ข้อมูลจาก 1,250 เคส) ---
 @st.cache_resource
 def load_bleed_model():
-    try: return joblib.load("bleedguard_model.pkl")
-    except: return None
+    try: 
+        return joblib.load("bleedguard_model.pkl")
+    except: 
+        return None
 
 ai_model = load_bleed_model()
 
-# --- 3. การเชื่อมต่อ Google Sheets ---
+# --- 3. การเชื่อมต่อ Google Sheets (ดึงข้อมูลล่าสุด) ---
 def get_data():
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
@@ -79,11 +81,11 @@ with st.form("nci_triage_form_final", clear_on_submit=False):
     st.markdown("<br>", unsafe_allow_html=True)
     submit_button = st.form_submit_button("🚀 ประเมินความเสี่ยงและบันทึกข้อมูล")
 
-# --- 6. ส่วนประมวลผล (AI + Clinical Override + Data Storage) ---
+# --- 6. ส่วนประมวลผล (Expert Hybrid Logic) ---
 if submit_button:
     if ai_model and case_id != "ENDO-NCI-":
         try:
-            # 1. AI คำนวณเบื้องต้น
+            # 1. AI ประมวลผลขั้นต้น
             input_data = [age, 1 if sex == "ชาย" else 0, size, 1 if location == "ลำไส้ใหญ่ฝั่งขวา" else 0,
                           1 if medication == "ใช่" else 0, 1 if surgery == "ใช่" else 0, 1 if radiation == "ใช่" else 0,
                           1 if chemo == "ใช่" else 0, 1 if procedure == "Biopsy Only" else 0, 
@@ -93,13 +95,16 @@ if submit_button:
             prob = ai_model.predict_proba(np.array([input_data]))[0][1]
             score_percent = prob * 100
 
-            # 2. Clinical Override & Score Alignment
+            # 2. ปรับจูน Score และ Risk (Clinical Override)
+            # เงื่อนไข RED
             if procedure == "EMR" or (medication == "ใช่" and hemoclip == "ใส่") or radiation == "ใช่":
                 risk, color, text_color, action = "RED", "#FF4B4B", "white", "🚨 โทรติดตามที่ 24, 48, 72 ชม. (High Risk Override)"
                 if score_percent < 85: score_percent = 85.0
+            # เงื่อนไข YELLOW
             elif hemoclip == "ใส่" or size >= 2.0:
-                risk, color, text_color, action = "YELLOW", "#FFCC00", "black", "⚠️ โทรติดตามที่ 24, 48 ชม. (Monitoring Required)"
+                risk, color, text_color, action = "YELLOW", "#FFCC00", "black", "⚠️ โทรติดตามที่ 24, 48 ชม. (เฝ้าระวังปัจจัยเสี่ยง)"
                 if score_percent < 35: score_percent = 35.0
+            # ผลตาม AI ปกติ
             elif prob >= 0.40: 
                 risk, color, text_color, action = "RED", "#FF4B4B", "white", "🚨 โทรติดตามที่ 24, 48, 72 ชม."
             elif prob >= 0.11: 
@@ -107,13 +112,13 @@ if submit_button:
             else: 
                 risk, color, text_color, action = "GREEN", "#28A745", "white", "✅ ให้คู่มือสังเกตอาการตามมาตรฐาน"
 
-            # แสดงผล Gauge
+            # 3. การแสดงผล (UI Output)
             res_col1, res_col2 = st.columns([1.2, 1])
             with res_col1:
                 fig_gauge = go.Figure(go.Indicator(
                     mode = "gauge+number", value = score_percent,
-                    number = {'suffix': "%"},
-                    title = {'text': f"Risk Score: {case_id}"},
+                    number = {'suffix': "%", 'font': {'size': 40}},
+                    title = {'text': f"Risk Score: {case_id}", 'font': {'size': 20}},
                     gauge = {
                         'axis': {'range': [0, 100]},
                         'bar': {'color': "black"},
@@ -124,73 +129,11 @@ if submit_button:
                         ]
                     }
                 ))
+                fig_gauge.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20))
                 st.plotly_chart(fig_gauge, use_container_width=True)
 
             with res_col2:
                 st.markdown(f"""
-                    <div style='background-color:{color}; padding:25px; border-radius:15px; text-align:center; color:{text_color}; margin-top:40px; border: 2px solid #333;'>
-                        <h2 style='margin:0;'>{risk}</h2>
-                        <h3 style='margin:10px;'>ความเสี่ยงเชิงคลินิก: {score_percent:.2f}%</h3>
-                        <p style='font-size: 1.2em; font-weight: bold;'>{action}</p>
-                    </div>""", unsafe_allow_html=True)
-
-            # 3. เตรียมข้อมูลบันทึกลง Google Sheets (ใส่ให้ครบทุกช่อง!)
-            new_entry = pd.DataFrame([{
-                "Timestamp": datetime.now(bkk_tz).strftime("%Y-%m-%d %H:%M:%S"),
-                "Case_ID": case_id,
-                "Age": age,
-                "Sex": sex,
-                "Size": size,
-                "loc_right": 1 if location == "ลำไส้ใหญ่ฝั่งขวา" else 0, 
-                "Medication": medication,
-                "Surgery": surgery,     # ช่อง Surgery
-                "Radiation": radiation, # ช่อง Radiation
-                "Chemo": chemo,         # ช่อง Chemo
-                "Clip": hemoclip,
-                "BX": 1 if procedure == "Biopsy Only" else 0,
-                "Cold_Poly": 1 if procedure == "Cold Snare" else 0,
-                "Hot_Poly": 1 if procedure == "Hot Polypectomy" else 0,
-                "EMR": 1 if procedure == "EMR" else 0,
-                "Risk_Level": risk, 
-                "Score": f"{score_percent:.2f}%", 
-                "Advice": action
-            }])
-            
-            conn = st.connection("gsheets", type=GSheetsConnection)
-            conn.update(worksheet="Sheet1", data=pd.concat([df_history, new_entry], ignore_index=True))
-            st.toast(f"✅ บันทึกข้อมูลเรียบร้อย ครบทุกช่องทาง")
-            
-            if st.button("🔄 บันทึกสำเร็จ! คลิกเพื่อรับเคสถัดไป"):
-                st.rerun()
-
-        except Exception as e:
-            st.error(f"เกิดข้อผิดพลาด: {e}")
-    else:
-        st.warning("⚠️ กรุณาระบุรหัสเคสให้ครบถ้วน")
-
-# --- 7. DASHBOARD ---
-st.divider()
-if not df_history.empty:
-    df_history['Timestamp'] = pd.to_datetime(df_history['Timestamp'], errors='coerce')
-    df_history['Date_Only'] = df_history['Timestamp'].dt.date
-    today = datetime.now(bkk_tz).date()
-    
-    search_date = st.date_input("📅 ตรวจสอบสถิติรายวัน", today)
-    df_filtered = df_history[df_history['Date_Only'] == search_date]
-    
-    st.markdown(f"#### 📊 สรุปเคสประจำวันที่ {search_date}")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("เคสทั้งหมด", f"{len(df_filtered)}")
-    c2.metric("🟢 ปกติ", len(df_filtered[df_filtered['Risk_Level'] == 'GREEN']))
-    c3.metric("🟡 เสี่ยงปานกลาง", len(df_filtered[df_filtered['Risk_Level'] == 'YELLOW']))
-    c4.metric("🔴 เสี่ยงสูง", len(df_filtered[df_filtered['Risk_Level'] == 'RED']))
-
-    st.write("📋 ประวัติการประเมิน 10 เคสล่าสุด")
-    show_cols = ['Timestamp', 'Case_ID', 'Risk_Level', 'Score', 'Advice']
-    styled_df = df_filtered.sort_values('Timestamp', ascending=False).head(10)[show_cols]
-    st.dataframe(
-        styled_df.style.map(highlight_risk, subset=['Risk_Level']), 
-        use_container_width=True, hide_index=True
-    )
-else:
-    st.info("💡 ระบบพร้อมทำงาน... เริ่มบันทึกข้อมูลเคสแรกได้เลยครับ")
+                    <div style='background-color:{color}; padding:30px; border-radius:15px; text-align:center; color:{text_color}; margin-top:40px; border: 3px solid #333;'>
+                        <h1 style='margin:0;'>{risk}</h1>
+                        <h3 style='margin:10px;'>โอกาสเลือดออก (Adj): {score_percent:.2f}%</h3>
