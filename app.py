@@ -174,7 +174,7 @@ if not df_history.empty:
     search_date = st.date_input("📅 ตรวจสอบสถิติรายวัน", today)
     df_filtered = df_history[df_history['Date_Only'] == search_date]
     
-    st.markdown(f"#### 📊 Сรุปเคสประจำวันที่ {search_date}")
+    st.markdown(f"#### 📊 สรุปเคสประจำวันที่ {search_date}")
     m1, m2, m3, m4 = st.columns(4) # ปรับตัวแปรไม่ให้ซ้ำซ้อนกับด้านบนเพื่อป้องกันปัญหา Code Leak
     m1.metric("เคสทั้งหมด", f"{len(df_filtered)}")
     m2.metric("🟢 ปกติ", len(df_filtered[df_filtered['Risk_Level'] == 'GREEN']))
