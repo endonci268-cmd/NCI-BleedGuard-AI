@@ -31,7 +31,21 @@ def load_bleed_model():
         return None
 
 ai_model = load_bleed_model()
+# ตรวจสอบรายละเอียดโมเดล
+if ai_model is not None:
+    st.subheader("Model Information")
 
+    st.write("Model type:", type(ai_model).__name__)
+    st.write("Number of features:", getattr(ai_model, "n_features_in_", "Not available"))
+    st.write("Classes:", getattr(ai_model, "classes_", "Not available"))
+
+    if hasattr(ai_model, "feature_names_in_"):
+        st.write("Feature names:", list(ai_model.feature_names_in_))
+
+    if hasattr(ai_model, "named_steps"):
+        st.write("Pipeline steps:", list(ai_model.named_steps.keys()))
+else:
+    st.error("ไม่พบไฟล์โมเดล")
 # --- 3. การเชื่อมต่อ Google Sheets ---
 def get_data():
     try:
